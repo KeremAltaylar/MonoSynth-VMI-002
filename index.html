@@ -3,44 +3,125 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sketch</title>
-  <script id="fxhash-snippet">
-    //---- do not edit the following code (you can indent as you wish)
-    let alphabet = "123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
-    var fxhash = "oo" + Array(49).fill(0).map(_=>alphabet[(Math.random()*alphabet.length)|0]).join('')
-    let b58dec = str=>[...str].reduce((p,c)=>p*alphabet.length+alphabet.indexOf(c)|0, 0)
-    let fxhashTrunc = fxhash.slice(2)
-    let regex = new RegExp(".{" + ((fxhashTrunc.length/4)|0) + "}", 'g')
-    let hashes = fxhashTrunc.match(regex).map(h => b58dec(h))
-    let sfc32 = (a, b, c, d) => {
-      return () => {
-        a |= 0; b |= 0; c |= 0; d |= 0
-        var t = (a + b | 0) + d | 0
-        d = d + 1 | 0
-        a = b ^ b >>> 9
-        b = c + (c << 3) | 0
-        c = c << 21 | c >>> 11
-        c = c + t | 0
-        return (t >>> 0) / 4294967296
-      }
-    }
-    var fxrand = sfc32(...hashes)
-    // true if preview mode active, false otherwise
-    // you can append preview=1 to the URL to simulate preview active
-    var isFxpreview = new URLSearchParams(window.location.search).get('preview') === "1"
-    // call this method to trigger the preview
-    function fxpreview() {
-      console.log("fxhash: TRIGGER PREVIEW")
-    }
-    //---- /do not edit the following code
-  </script>
-  <link rel="stylesheet" type="text/css" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#141b18" />
+  <title>VMI-002 — Monophonic Synth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;500&display=swap" />
+  <link rel="stylesheet" type="text/css" href="style.css" />
   <script src="libraries/p5.js"></script>
   <script src="libraries/p5.sound.js"></script>
 </head>
 
 <body>
+  <div class="app" id="app">
+    <header class="bar">
+      <div class="brand">
+        <span class="mark">VMI-002</span>
+        <h1>Mono<span class="long">phonic </span>Synth</h1>
+      </div>
+      <div class="bar-actions">
+        <button type="button" id="power" class="btn btn-primary">Start audio</button>
+        <button type="button" id="keys-toggle" class="btn" aria-expanded="false">Play keys</button>
+      </div>
+    </header>
+
+    <div class="scope" id="scope"></div>
+
+    <main class="panels">
+      <section class="panel">
+        <h2>Voice</h2>
+        <div class="field">
+          <label>Waveform</label>
+          <div class="segmented" id="wave-seg" role="group" aria-label="Waveform"></div>
+        </div>
+        <div class="field">
+          <label>Scale</label>
+          <div class="segmented" id="scale-seg" role="group" aria-label="Scale"></div>
+        </div>
+        <div class="field">
+          <label for="octave">Octave</label>
+          <span class="value" id="octave-out">0</span>
+          <div class="stepper">
+            <button type="button" id="oct-down" aria-label="Octave down">&minus;</button>
+            <button type="button" id="oct-up" aria-label="Octave up">+</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Envelope</h2>
+        <div class="field">
+          <label for="attack">Attack</label><span class="value" id="attack-out"></span>
+          <input type="range" id="attack" min="0.001" max="1" step="0.001" value="0.001" />
+        </div>
+        <div class="field">
+          <label for="decay">Decay</label><span class="value" id="decay-out"></span>
+          <input type="range" id="decay" min="0.1" max="3" step="0.01" value="0.3" />
+        </div>
+        <div class="field">
+          <label for="sustain">Sustain</label><span class="value" id="sustain-out"></span>
+          <input type="range" id="sustain" min="0.1" max="1" step="0.01" value="0.3" />
+        </div>
+        <div class="field">
+          <label for="release">Release</label><span class="value" id="release-out"></span>
+          <input type="range" id="release" min="0.001" max="3" step="0.01" value="0.02" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Space</h2>
+        <div class="field">
+          <label for="reverb">Reverb mix</label><span class="value" id="reverb-out"></span>
+          <input type="range" id="reverb" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <div class="field">
+          <label for="delay">Delay time</label><span class="value" id="delay-out"></span>
+          <input type="range" id="delay" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <div class="field">
+          <label for="drive">Distortion</label><span class="value" id="drive-out"></span>
+          <input type="range" id="drive" min="0" max="1" step="0.01" value="0" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Noise</h2>
+        <div class="field">
+          <label>Colour</label>
+          <div class="segmented" id="noise-seg" role="group" aria-label="Noise colour"></div>
+        </div>
+        <div class="field">
+          <label for="noise-level">Level</label><span class="value" id="noise-level-out"></span>
+          <input type="range" id="noise-level" min="0" max="0.03" step="0.0001" value="0.00001" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Arpeggio</h2>
+        <div class="field">
+          <button type="button" id="loop-toggle" class="btn btn-wide" aria-pressed="false">Start loop</button>
+        </div>
+        <div class="field">
+          <label for="chord">Chord</label><span class="value" id="chord-out"></span>
+          <input type="range" id="chord" min="0" max="6" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="loop-delay">Loop delay</label><span class="value" id="loop-delay-out"></span>
+          <input type="range" id="loop-delay" min="0" max="1" step="0.01" value="0" />
+        </div>
+      </section>
+    </main>
+
+    <div class="dock" id="dock" aria-hidden="true">
+      <div class="key-row" id="row-up" data-tone="var(--cool)"></div>
+      <div class="key-row" id="row-base" data-tone="var(--amber)"></div>
+      <div class="key-row" id="row-down" data-tone="var(--ember)"></div>
+      <p class="dock-hint">Tap the keys, or play the matching letters on a physical keyboard</p>
+    </div>
+  </div>
+
   <script src="sketch.js"></script>
 </body>
 
