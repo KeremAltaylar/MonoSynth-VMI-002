@@ -19,6 +19,11 @@ const SCALES = [
 
 const WAVES = ['square', 'sine', 'sawtooth', 'triangle'];
 const NOISES = ['pink', 'brown', 'white'];
+const FILTERS = [
+  { id: 'lowpass', label: 'LP' },
+  { id: 'highpass', label: 'HP' },
+  { id: 'bandpass', label: 'BP' },
+];
 
 /* Each row is one register. The letters match the original key mapping. */
 const ROWS = [
@@ -29,7 +34,7 @@ const ROWS = [
 
 // ---- State -----------------------------------------------------------------
 
-let osc, osc2, noise, delay, delayLoop, reverb, distortion, fft;
+let osc, osc2, noise, delay, delayLoop, reverb, distortion, filter, fft;
 let env1, env2, env3;
 let soundLoop;
 
@@ -41,6 +46,9 @@ let octave = 5;
 let noiseLevel = 0.00001;
 let waveScale = 1;
 let step = 0;
+let detuneCents = 0;
+/** Phase of the idle drift line, so the scope is never completely still. */
+let drift = 0;
 
 /** Every control element, looked up once. */
 const ui = {};
@@ -79,6 +87,13 @@ function setup() {
   reverb.process(delayLoop, 10, 10);
   distortion.process(reverb);
 
+  /* The filter sits last, after the room, so sweeping it darkens the tails as
+     well as the note. Disconnecting the distortion first keeps the dry copy of
+     the signal from running past the filter straight to the output. */
+  filter = new p5.Filter('lowpass');
+  distortion.disconnect();
+  filter.process(distortion);
+
   soundLoop = new p5.SoundLoop(onSoundLoop, 2);
 
   buildInterface();
@@ -98,34 +113,51 @@ function draw() {
 
   background('#0f1412');
 
-  // Spectrum along the floor.
+  /* Spectrum: columns rising off the floor, warm at the bottom of the range and
+     cool at the top, so register is legible at a glance. */
   const spectrum = fft.analyze();
   noStroke();
-  fill('#c4553a');
   const bw = width / spectrum.length;
   for (let i = 0; i < spectrum.length; i++) {
-    const h = map(spectrum[i], 0, 255, 0, height * 0.7);
-    rect(i * bw, height - h, bw + 1, h);
+    const level = spectrum[i] / 255;
+    const mix = i / spectrum.length;
+    fill(217 - mix * 90, 132 + mix * 46, 90 + mix * 106, (0.18 + level * 0.5) * 255);
+    rect(i * bw, height - level * height * 0.62, bw + 1, level * height * 0.62);
   }
 
-  // Waveform through the middle.
-  const form = fft.waveform();
-  noFill();
-  stroke('#e8b64c');
-  strokeWeight(1.5);
-  beginShape();
-  for (let i = 0; i < form.length; i++) {
-    vertex(
-      map(i, 0, form.length - 1, 0, width),
-      map(form[i], -waveScale, waveScale, height, 0)
-    );
-  }
-  endShape();
-
-  // Centre line, so a silent scope still reads as an instrument.
-  stroke('rgba(188, 207, 182, 0.16)');
+  // Horizon, so a silent scope still reads as an instrument.
+  stroke(188, 207, 182, 36);
   strokeWeight(1);
   line(0, height / 2, width, height / 2);
+
+  /* The waveform is traced twice — a wide soft pass under a thin bright one —
+     so the trace glows without needing a blur filter. */
+  const form = fft.waveform();
+  noFill();
+  const trace = (weight, alpha) => {
+    stroke(232, 182, 76, alpha);
+    strokeWeight(weight);
+    beginShape();
+    for (let i = 0; i < form.length; i++) {
+      vertex(
+        map(i, 0, form.length - 1, 0, width),
+        map(form[i], -waveScale, waveScale, height, 0)
+      );
+    }
+    endShape();
+  };
+  trace(5, 40);
+  trace(1.5, 255);
+
+  // A slow sine crossing the floor: the panel is alive before the first note.
+  drift += 0.006;
+  stroke(188, 207, 182, 40);
+  strokeWeight(1);
+  beginShape();
+  for (let x = 0; x <= width; x += 6) {
+    vertex(x, height - 10 - Math.sin(x * 0.012 + drift) * 5);
+  }
+  endShape();
 }
 
 function windowResized() {
@@ -181,7 +213,11 @@ function onSoundLoop() {
     mul = 2;
   }
   osc2.amp(env3);
-  osc2.freq(SCALES[scaleIndex].steps[degree] * ROOT * octave * mul);
+  /* Detuning the arpeggio voice against the played note is what puts the beat
+     into a sustained chord. */
+  osc2.freq(
+    SCALES[scaleIndex].steps[degree] * ROOT * octave * mul * Math.pow(2, detuneCents / 1200)
+  );
   env3.play();
   step += 2;
 }
@@ -213,15 +249,27 @@ function buildInterface() {
   segmented($('wave-seg'), WAVES, waveIndex, (i) => (waveIndex = i));
   segmented($('scale-seg'), SCALES.map((sc) => sc.label), scaleIndex, (i) => (scaleIndex = i));
   segmented($('noise-seg'), NOISES, noiseIndex, (i) => (noiseIndex = i));
+  segmented($('filter-seg'), FILTERS.map((f) => f.label), 0, (i) => filter.setType(FILTERS[i].id));
 
   slider($('attack'), $('attack-out'), (v) => `${v.toFixed(3)}s`, setEnvelope);
   slider($('decay'), $('decay-out'), (v) => `${v.toFixed(2)}s`, setEnvelope);
   slider($('sustain'), $('sustain-out'), (v) => v.toFixed(2), setEnvelope);
   slider($('release'), $('release-out'), (v) => `${v.toFixed(2)}s`, setEnvelope);
 
+  slider($('cutoff'), $('cutoff-out'), hz, (v) => filter.freq(v));
+  slider($('res'), $('res-out'), (v) => v.toFixed(1), (v) => filter.res(v));
+  slider($('detune'), $('detune-out'), (v) => `${v > 0 ? '+' : ''}${v}¢`, (v) => (detuneCents = v));
+
   slider($('reverb'), $('reverb-out'), (v) => v.toFixed(2), (v) => reverb.drywet(v));
+  slider($('reverb-time'), $('reverb-time-out'), (v) => `${v.toFixed(1)}s`, (v) => reverb.set(v, 10));
   slider($('delay'), $('delay-out'), (v) => `${v.toFixed(2)}s`, (v) => delay.delayTime(v));
+  slider($('delay-fb'), $('delay-fb-out'), (v) => v.toFixed(2), (v) => {
+    delay.feedback(v);
+    delayLoop.feedback(v);
+  });
   slider($('drive'), $('drive-out'), (v) => v.toFixed(2), (v) => distortion.drywet(v));
+  slider($('drive-amt'), $('drive-amt-out'), (v) => v.toFixed(2), (v) => distortion.set(v, '2x'));
+  slider($('volume'), $('volume-out'), (v) => v.toFixed(2), (v) => masterVolume(v));
   slider($('loop-delay'), $('loop-delay-out'), (v) => `${v.toFixed(2)}s`, (v) => delayLoop.delayTime(v));
   /* The usable noise range is tiny in absolute terms, so show it as a percentage
      of the slider's span rather than a row of leading zeros. */
@@ -256,6 +304,11 @@ function setEnvelope() {
 function setOctave(next) {
   octave = constrain(next, 1.25, 20);
   ui.octaveOut.textContent = `${Math.round(Math.log2(octave / 5))}`;
+}
+
+/** Hz reads better as kHz once past a thousand. */
+function hz(v) {
+  return v >= 1000 ? `${(v / 1000).toFixed(1)}kHz` : `${Math.round(v)}Hz`;
 }
 
 function segmented(container, labels, initial, onPick) {

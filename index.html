@@ -48,6 +48,26 @@
             <button type="button" id="oct-up" aria-label="Octave up">+</button>
           </div>
         </div>
+        <div class="field">
+          <label for="detune">Detune</label><span class="value" id="detune-out"></span>
+          <input type="range" id="detune" min="-50" max="50" step="1" value="0" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Filter</h2>
+        <div class="field">
+          <label>Type</label>
+          <div class="segmented" id="filter-seg" role="group" aria-label="Filter type"></div>
+        </div>
+        <div class="field">
+          <label for="cutoff">Cutoff</label><span class="value" id="cutoff-out"></span>
+          <input type="range" id="cutoff" min="80" max="16000" step="10" value="16000" />
+        </div>
+        <div class="field">
+          <label for="res">Resonance</label><span class="value" id="res-out"></span>
+          <input type="range" id="res" min="0" max="20" step="0.1" value="1" />
+        </div>
       </section>
 
       <section class="panel">
@@ -81,8 +101,20 @@
           <input type="range" id="delay" min="0" max="1" step="0.01" value="0" />
         </div>
         <div class="field">
+          <label for="reverb-time">Reverb time</label><span class="value" id="reverb-time-out"></span>
+          <input type="range" id="reverb-time" min="0.5" max="10" step="0.1" value="3" />
+        </div>
+        <div class="field">
+          <label for="delay-fb">Delay feedback</label><span class="value" id="delay-fb-out"></span>
+          <input type="range" id="delay-fb" min="0" max="0.9" step="0.01" value="0.7" />
+        </div>
+        <div class="field">
           <label for="drive">Distortion</label><span class="value" id="drive-out"></span>
           <input type="range" id="drive" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <div class="field">
+          <label for="drive-amt">Drive amount</label><span class="value" id="drive-amt-out"></span>
+          <input type="range" id="drive-amt" min="0" max="1" step="0.01" value="0.3" />
         </div>
       </section>
 
@@ -110,6 +142,14 @@
         <div class="field">
           <label for="loop-delay">Loop delay</label><span class="value" id="loop-delay-out"></span>
           <input type="range" id="loop-delay" min="0" max="1" step="0.01" value="0" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Master</h2>
+        <div class="field">
+          <label for="volume">Volume</label><span class="value" id="volume-out"></span>
+          <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" />
         </div>
       </section>
     </main>
