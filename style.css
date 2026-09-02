@@ -2,16 +2,19 @@
    structure, and keeps the instrument's own ember/amber signal colours. */
 
 :root {
-  --bg: #141b18;
-  --panel: #1c2521;
-  --raised: #243029;
-  --line: rgba(188, 207, 182, 0.14);
-  --line-lit: rgba(188, 207, 182, 0.32);
+  --sunk: oklch(18% 0.012 162);
+  --bg: oklch(24% 0.014 162);
+  --panel: oklch(28% 0.015 162);
+  --raised: oklch(33% 0.016 162);
+  --line: color-mix(in oklch, var(--sage) 16%, transparent);
+  --line-lit: color-mix(in oklch, var(--sage) 32%, transparent);
 
-  --ink: #e4e7e4;
-  --dim: #93a196;
+  --ink: oklch(92.5% 0.006 150);
+  --dim: oklch(78% 0.011 150);
+  --faint: oklch(71% 0.013 150);
+  --lamp: oklch(88% 0.085 140);
 
-  --sage: #bccfb6;
+  --sage: oklch(83% 0.040 138);
   --amber: #e8b64c;
   --ember: #c4553a;
   --cool: #7fb2c4;
@@ -479,4 +482,171 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   .panels {
     transition: none;
   }
+}
+
+/* ---- Faceplate ----
+   Matches VMI-001 and the Maqam Synth: the panels hug their knobs instead of
+   scrolling, and the scope takes the height they give back. */
+
+.panels {
+  flex: 0 0 auto;
+  overflow: visible;
+  grid-template-columns: repeat(12, 1fr);
+  align-items: stretch;
+  gap: clamp(0.5rem, 1.2vw, 0.85rem);
+  padding: clamp(0.5rem, 1.4vh, 0.9rem) clamp(0.85rem, 3vw, 1.75rem);
+}
+
+.panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-around;
+  gap: 0.3rem clamp(0.35rem, 1vw, 0.7rem);
+  padding: 0.55rem 0.7rem 0.6rem;
+  border-radius: calc(var(--radius) / 2);
+  background:
+    linear-gradient(168deg, var(--raised), var(--panel) 62%),
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.panel > h2 {
+  flex: 1 0 100%;
+  margin-bottom: 0.25rem;
+  font-size: 0.56rem;
+  letter-spacing: 0.26em;
+  color: var(--faint);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Voice needs width, not height: its waveform and scale pickers wrap into
+   three rows in a narrow column and drag the whole faceplate row with them.
+   Row 1: Voice, Filter, Envelope. Row 2: Space, Noise, Arpeggio, Master. */
+.panel:nth-of-type(1) { grid-column: span 4; }
+.panel:nth-of-type(2) { grid-column: span 4; }
+.panel:nth-of-type(3) { grid-column: span 4; }
+.panel:nth-of-type(4) { grid-column: span 5; }
+.panel:nth-of-type(5) { grid-column: span 3; }
+.panel:nth-of-type(6) { grid-column: span 2; }
+.panel:nth-of-type(7) { grid-column: span 2; }
+
+/* Segmented pickers and steppers sit inline beside the knobs rather than
+   claiming a full row each. */
+.panel .field:not(.has-knob) {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  margin-bottom: 0;
+}
+.panel .field:not(.has-knob) > label { font-size: 0.58rem; color: var(--dim); }
+
+.scope {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: clamp(4.5rem, 14vh, 11rem);
+  background: var(--sunk);
+  box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.5);
+  border-radius: calc(var(--radius) / 2);
+}
+
+/* ---- Knobs ---- (see knob.js: the native range stays inside as the control) */
+
+.field.has-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.field.has-knob > .knob { order: 1; }
+.field.has-knob > label {
+  order: 2;
+  font-size: 0.58rem;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  text-align: center;
+  line-height: 1.2;
+}
+.field.has-knob > .value {
+  order: 3;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--sage);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.knob {
+  position: relative;
+  width: clamp(2.1rem, 3.4vh, 2.9rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  cursor: ns-resize;
+  touch-action: none;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 34% 28%, var(--raised), var(--sunk) 78%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.knob svg { width: 118%; height: 118%; overflow: visible; }
+
+.knob-track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 3;
+  transform: rotate(135deg);
+  transform-origin: 24px 24px;
+  stroke-dasharray: 84.82 113.1;
+}
+
+.knob-arc {
+  fill: none;
+  stroke: var(--sage);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform: rotate(135deg);
+  transform-origin: 24px 24px;
+}
+
+.knob-pointer {
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform-origin: 24px 24px;
+}
+
+.knob:hover .knob-arc,
+.knob.is-focused .knob-arc { stroke: var(--lamp); }
+.knob.is-focused { outline: 2px solid var(--lamp); outline-offset: 3px; }
+
+.knob input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.field:not(.has-knob) { min-width: 7rem; }
+
+@media (max-width: 900px), (max-height: 620px) {
+  .panels {
+    grid-template-columns: repeat(6, 1fr);
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+  .panel:nth-of-type(n) { grid-column: span 3; }
+  .scope { flex: 0 0 auto; }
 }
