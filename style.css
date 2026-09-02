@@ -525,13 +525,15 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 /* Voice needs width, not height: its waveform and scale pickers wrap into
    three rows in a narrow column and drag the whole faceplate row with them.
    Row 1: Voice, Filter, Envelope. Row 2: Space, Noise, Arpeggio, Master. */
+/* Voice, Filter, Envelope | Space, Noise, Arpeggio | Saturate, Master */
 .panel:nth-of-type(1) { grid-column: span 4; }
-.panel:nth-of-type(2) { grid-column: span 4; }
-.panel:nth-of-type(3) { grid-column: span 4; }
+.panel:nth-of-type(2) { grid-column: span 3; }
+.panel:nth-of-type(3) { grid-column: span 5; }
 .panel:nth-of-type(4) { grid-column: span 5; }
-.panel:nth-of-type(5) { grid-column: span 3; }
-.panel:nth-of-type(6) { grid-column: span 2; }
-.panel:nth-of-type(7) { grid-column: span 2; }
+.panel:nth-of-type(5) { grid-column: span 2; }
+.panel:nth-of-type(6) { grid-column: span 5; }
+.panel:nth-of-type(7) { grid-column: span 8; }
+.panel:nth-of-type(8) { grid-column: span 4; }
 
 /* Segmented pickers and steppers sit inline beside the knobs rather than
    claiming a full row each. */

@@ -78,11 +78,22 @@ function setup() {
 
   osc.freq(0);
   osc.amp(env1);
+  /* p5.SoundLoop hands the callback the offset, in seconds from now, at which
+     this step should sound — it fires early on purpose so the note can be
+     scheduled ahead on the audio clock. Dropping it made every arpeggio note
+     land whenever the main thread got to it, which is audible as an uneven
+     arpeggio. Both the pitch change and the envelope take the same offset. */
   osc2.freq(0);
   osc2.amp(env1);
-  delay.process(osc, 0.82, 0.7, 2300);
-  delayLoop.process(osc2, 0.82, 0.7, 2300);
-  delay.process(noise, 0.82, 0.7, 2300);
+  /* Both delays were left fully wet — p5.Effect constructs as CrossFade(1) —
+     with their internal lowpass at 2300Hz, so everything this synth played was
+     a comb-filtered, dulled copy of itself. They now start dry (the mix knobs
+     below set drywet, not delayTime) and the lowpass only shapes the repeats. */
+  delay.process(osc, 0.25, 0.4, 8000);
+  delayLoop.process(osc2, 0.25, 0.4, 8000);
+  delay.process(noise, 0.25, 0.4, 8000);
+  delay.drywet(0);
+  delayLoop.drywet(0);
   reverb.process(delay, 10, 10);
   reverb.process(delayLoop, 10, 10);
   distortion.process(reverb);
@@ -93,6 +104,15 @@ function setup() {
   filter = new p5.Filter('lowpass');
   distortion.disconnect();
   filter.process(distortion);
+
+  /* A limiter on the master and a two-band saturator before it — the same
+     chain as VMI-001. Both start transparent. */
+  saturator = createSaturator(getAudioContext(), { lowCross: 180, highCross: 3200 });
+  compressor = new p5.Compressor();
+  compressor.set(0.003, 0, 20, -3, 0.15);
+  filter.disconnect();
+  filter.connect(saturator.input);
+  saturator.output.connect(compressor.input);
 
   soundLoop = new p5.SoundLoop(onSoundLoop, 2);
 
@@ -133,6 +153,11 @@ function draw() {
   /* The waveform is traced twice — a wide soft pass under a thin bright one —
      so the trace glows without needing a blur filter. */
   const form = fft.waveform();
+  /* Clipping is read off the mastered waveform, not guessed from the faders. */
+  let peak = 0;
+  for (let i = 0; i < form.length; i++) { const v = Math.abs(form[i]); if (v > peak) peak = v; }
+  if (peak >= 0.99) clipUntil = millis() + 700;
+  if (ui.clip) ui.clip.hidden = millis() > clipUntil;
   noFill();
   const trace = (weight, alpha) => {
     stroke(232, 182, 76, alpha);
@@ -200,7 +225,7 @@ function press(entry) {
   entry.el.classList.add('active');
 }
 
-function onSoundLoop() {
+function onSoundLoop(timeFromNow) {
   const chord = parseInt(ui.chord.value, 10);
   if (step > 4 + chord) {
     step = chord;
@@ -216,13 +241,31 @@ function onSoundLoop() {
   /* Detuning the arpeggio voice against the played note is what puts the beat
      into a sustained chord. */
   osc2.freq(
-    SCALES[scaleIndex].steps[degree] * ROOT * octave * mul * Math.pow(2, detuneCents / 1200)
+    SCALES[scaleIndex].steps[degree] * ROOT * octave * mul * Math.pow(2, detuneCents / 1200),
+    0,
+    timeFromNow
   );
-  env3.play();
+  env3.play(osc2, timeFromNow);
   step += 2;
 }
 
 // ---- Interface -------------------------------------------------------------
+
+/* One writer for every tempo-locked value: both delay times and the arpeggio
+   loop interval. Called when the tempo moves as well as when a division is
+   picked, which is the point — 1/8 stays an eighth note at any tempo. */
+function applyTempoSync() {
+  const beat = 60 / bpm;
+  const secs = (idx) => DIVISIONS[idx].beats * beat;
+  /* p5.Delay allocates a fixed line; keep well inside it. */
+  if (delay) delay.delayTime(Math.min(1.9, secs(delayDiv)));
+  if (delayLoop) delayLoop.delayTime(Math.min(1.9, secs(loopDiv)));
+  if (soundLoop) soundLoop.interval = secs(loopDiv) * 2;
+  const d = document.getElementById("delay-div-out");
+  const l = document.getElementById("loop-div-out");
+  if (d) d.textContent = `${DIVISIONS[delayDiv].label} · ${secs(delayDiv).toFixed(2)}s`;
+  if (l) l.textContent = `${DIVISIONS[loopDiv].label} · ${(secs(loopDiv) * 2).toFixed(2)}s`;
+}
 
 function buildInterface() {
   const $ = (id) => document.getElementById(id);
@@ -256,21 +299,26 @@ function buildInterface() {
   slider($('sustain'), $('sustain-out'), (v) => v.toFixed(2), setEnvelope);
   slider($('release'), $('release-out'), (v) => `${v.toFixed(2)}s`, setEnvelope);
 
-  slider($('cutoff'), $('cutoff-out'), hz, (v) => filter.freq(v));
+  slider($('cutoff'), $('cutoff-out'), hz, (v) => filter.freq(v, 0.02));
   slider($('res'), $('res-out'), (v) => v.toFixed(1), (v) => filter.res(v));
   slider($('detune'), $('detune-out'), (v) => `${v > 0 ? '+' : ''}${v}¢`, (v) => (detuneCents = v));
 
   slider($('reverb'), $('reverb-out'), (v) => v.toFixed(2), (v) => reverb.drywet(v));
   slider($('reverb-time'), $('reverb-time-out'), (v) => `${v.toFixed(1)}s`, (v) => reverb.set(v, 10));
-  slider($('delay'), $('delay-out'), (v) => `${v.toFixed(2)}s`, (v) => delay.delayTime(v));
+  slider($('delay'), $('delay-out'), (v) => (v === 0 ? 'dry' : v.toFixed(2)), (v) => delay.drywet(v));
+  slider($('delay-div'), $('delay-div-out'), () => '', (v) => { delayDiv = v; applyTempoSync(); });
   slider($('delay-fb'), $('delay-fb-out'), (v) => v.toFixed(2), (v) => {
     delay.feedback(v);
     delayLoop.feedback(v);
   });
   slider($('drive'), $('drive-out'), (v) => v.toFixed(2), (v) => distortion.drywet(v));
   slider($('drive-amt'), $('drive-amt-out'), (v) => v.toFixed(2), (v) => distortion.set(v, '2x'));
-  slider($('volume'), $('volume-out'), (v) => v.toFixed(2), (v) => masterVolume(v));
-  slider($('loop-delay'), $('loop-delay-out'), (v) => `${v.toFixed(2)}s`, (v) => delayLoop.delayTime(v));
+  slider($('volume'), $('volume-out'), (v) => v.toFixed(2), (v) => masterVolume(v, 0.02));
+  slider($('loop-delay'), $('loop-delay-out'), (v) => (v === 0 ? 'dry' : v.toFixed(2)), (v) => delayLoop.drywet(v));
+  slider($('loop-div'), $('loop-div-out'), () => '', (v) => { loopDiv = v; applyTempoSync(); });
+  slider($('tempo'), $('tempo-out'), (v) => `${v} bpm`, (v) => { bpm = v; applyTempoSync(); });
+  slider($('sat-low'), $('sat-low-out'), (v) => (v === 0 ? 'off' : v.toFixed(2)), (v) => saturator.setLow(v));
+  slider($('sat-high'), $('sat-high-out'), (v) => (v === 0 ? 'off' : v.toFixed(2)), (v) => saturator.setHigh(v));
   /* The usable noise range is tiny in absolute terms, so show it as a percentage
      of the slider's span rather than a row of leading zeros. */
   slider($('noise-level'), $('noise-level-out'), (v) => `${Math.round((v / 0.03) * 100)}%`, (v) => (noiseLevel = v));
@@ -290,6 +338,9 @@ function buildInterface() {
   });
 
   buildKeys();
+
+  applyTempoSync();
+  ui.clip = document.getElementById("clip");
 }
 
 function setEnvelope() {
@@ -366,3 +417,21 @@ function buildKeys() {
     });
   }
 }
+/* Musical divisions, in quarter notes. Shared by both delays and the arpeggio
+   loop so nothing drifts against anything else when the tempo moves. */
+const DIVISIONS = [
+  { label: '1/1', beats: 4 },
+  { label: '1/2', beats: 2 },
+  { label: '1/4.', beats: 1.5 },
+  { label: '1/4', beats: 1 },
+  { label: '1/8.', beats: 0.75 },
+  { label: '1/8', beats: 0.5 },
+  { label: '1/8T', beats: 1 / 3 },
+  { label: '1/16', beats: 0.25 },
+];
+let bpm = 90;
+let delayDiv = 5;
+let loopDiv = 3;
+let compressor, saturator;
+let clipUntil = 0;
+

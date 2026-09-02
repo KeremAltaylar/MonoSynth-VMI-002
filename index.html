@@ -22,6 +22,7 @@
         <h1>Mono<span class="long">phonic </span>Synth</h1>
       </div>
       <div class="bar-actions">
+        <span class="clip" id="clip" aria-live="polite" hidden>Clip</span>
         <button type="button" id="power" class="btn btn-primary">Start audio</button>
         <button type="button" id="keys-toggle" class="btn" aria-expanded="false">Play keys</button>
       </div>
@@ -74,7 +75,7 @@
         <h2>Envelope</h2>
         <div class="field">
           <label for="attack">Attack</label><span class="value" id="attack-out"></span>
-          <input type="range" id="attack" min="0.001" max="1" step="0.001" value="0.001" />
+          <input type="range" id="attack" min="0.005" max="1" step="0.001" value="0.01" />
         </div>
         <div class="field">
           <label for="decay">Decay</label><span class="value" id="decay-out"></span>
@@ -86,7 +87,7 @@
         </div>
         <div class="field">
           <label for="release">Release</label><span class="value" id="release-out"></span>
-          <input type="range" id="release" min="0.001" max="3" step="0.01" value="0.02" />
+          <input type="range" id="release" min="0.03" max="3" step="0.01" value="0.2" />
         </div>
       </section>
 
@@ -97,8 +98,12 @@
           <input type="range" id="reverb" min="0" max="1" step="0.01" value="0" />
         </div>
         <div class="field">
-          <label for="delay">Delay time</label><span class="value" id="delay-out"></span>
+          <label for="delay">Delay mix</label><span class="value" id="delay-out"></span>
           <input type="range" id="delay" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <div class="field">
+          <label for="delay-div">Delay time</label><span class="value" id="delay-div-out"></span>
+          <input type="range" id="delay-div" min="0" max="7" step="1" value="5" />
         </div>
         <div class="field">
           <label for="reverb-time">Reverb time</label><span class="value" id="reverb-time-out"></span>
@@ -133,6 +138,10 @@
       <section class="panel">
         <h2>Arpeggio</h2>
         <div class="field">
+          <label for="tempo">Tempo</label><span class="value" id="tempo-out"></span>
+          <input type="range" id="tempo" min="40" max="200" step="1" value="90" />
+        </div>
+        <div class="field">
           <button type="button" id="loop-toggle" class="btn btn-wide" aria-pressed="false">Start loop</button>
         </div>
         <div class="field">
@@ -140,8 +149,24 @@
           <input type="range" id="chord" min="0" max="6" step="1" value="0" />
         </div>
         <div class="field">
-          <label for="loop-delay">Loop delay</label><span class="value" id="loop-delay-out"></span>
+          <label for="loop-delay">Loop mix</label><span class="value" id="loop-delay-out"></span>
           <input type="range" id="loop-delay" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <div class="field">
+          <label for="loop-div">Loop time</label><span class="value" id="loop-div-out"></span>
+          <input type="range" id="loop-div" min="0" max="7" step="1" value="3" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Saturate</h2>
+        <div class="field">
+          <label for="sat-low">Low</label><span class="value" id="sat-low-out"></span>
+          <input type="range" id="sat-low" min="0" max="1" step="0.01" value="0" />
+        </div>
+        <div class="field">
+          <label for="sat-high">High</label><span class="value" id="sat-high-out"></span>
+          <input type="range" id="sat-high" min="0" max="1" step="0.01" value="0" />
         </div>
       </section>
 
@@ -163,6 +188,7 @@
   </div>
 
   <script src="knob.js"></script>
+  <script src="saturator.js"></script>
   <script src="sketch.js"></script>
 </body>
 
