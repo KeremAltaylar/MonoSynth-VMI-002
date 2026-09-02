@@ -85,18 +85,36 @@ function setup() {
      arpeggio. Both the pitch change and the envelope take the same offset. */
   osc2.freq(0);
   osc2.amp(env1);
-  /* Both delays were left fully wet — p5.Effect constructs as CrossFade(1) —
-     with their internal lowpass at 2300Hz, so everything this synth played was
-     a comb-filtered, dulled copy of itself. They now start dry (the mix knobs
-     below set drywet, not delayTime) and the lowpass only shapes the repeats. */
+  /* Every source and every effect stage is disconnected from the master before
+     it is patched onward, so the signal reaches the output by exactly one path.
+     p5.Oscillator connects itself to the master when constructed and p5.Effect
+     does the same, so without this the raw oscillators AND each stage were all
+     being heard in parallel with the chain — several summed copies, bypassing
+     the filter, saturator and limiter. That is what made the default sound
+     washy no matter how the mixes were set.
+
+     The delays also start dry: p5.Effect constructs as CrossFade(1), fully wet,
+     and their internal lowpass sat at 2300Hz, so everything played was a
+     comb-filtered, dulled copy of itself. */
+  osc.disconnect();
+  osc2.disconnect();
+  noise.disconnect();
+
   delay.process(osc, 0.25, 0.4, 8000);
-  delayLoop.process(osc2, 0.25, 0.4, 8000);
   delay.process(noise, 0.25, 0.4, 8000);
+  delayLoop.process(osc2, 0.25, 0.4, 8000);
   delay.drywet(0);
   delayLoop.drywet(0);
+  delay.disconnect();
+  delayLoop.disconnect();
+
   reverb.process(delay, 10, 10);
   reverb.process(delayLoop, 10, 10);
+  reverb.drywet(0);
+  reverb.disconnect();
+
   distortion.process(reverb);
+  distortion.drywet(0);
 
   /* The filter sits last, after the room, so sweeping it darkens the tails as
      well as the note. Disconnecting the distortion first keeps the dry copy of
