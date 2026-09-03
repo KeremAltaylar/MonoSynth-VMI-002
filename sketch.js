@@ -17,7 +17,9 @@ const SCALES = [
   { label: 'Har.min', steps: [s(0), s(2), s(3), s(5), s(7), s(8), s(11), s(12)] },
 ];
 
-const WAVES = ['square', 'sine', 'sawtooth', 'triangle'];
+/* Sine first, so the instrument opens on the plainest voice it has. A square
+   is buzzy by nature and reads as an effect when you have not asked for one. */
+const WAVES = ['sine', 'triangle', 'sawtooth', 'square'];
 const NOISES = ['pink', 'brown', 'white'];
 const FILTERS = [
   { id: 'lowpass', label: 'LP' },
