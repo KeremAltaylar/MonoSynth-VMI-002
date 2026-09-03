@@ -153,11 +153,16 @@ function draw() {
   noise.setType(NOISES[noiseIndex]);
 
   const amp = waveScale;
-  env1.setRange(amp * 0.1, 0);
+  env1.setRange(Math.max(amp * 0.1, 1e-6), 0);
   /* env3 belongs to the loop and carries the loop Level; setting it here every
      frame overwrote that control. env1 and env2 are the keyboard voice and its
      noise, so those stay. */
-  env2.setRange(noiseLevel, 0);
+  /* Clamped above zero on purpose. p5.Envelope.setRange does
+     `this.aLevel = aLevel || 1`, so a level of exactly 0 does not mean silence —
+     it means FULL SCALE. The noise slider defaulted to 0.00001, which is not a
+     multiple of its own step, so the browser rounded it to 0, and every key
+     press then fired white noise at full amplitude alongside the note. */
+  env2.setRange(Math.max(noiseLevel, 1e-6), 0);
 
   background('#0f1412');
 
@@ -286,7 +291,7 @@ function onSoundLoop(timeFromNow) {
   const mul = Math.pow(2, Math.floor(idx / scale.length));
 
   osc2.amp(env3);
-  env3.setRange(loopLevel * 0.25, 0);
+  env3.setRange(Math.max(loopLevel * 0.25, 1e-6), 0);
   /* Gate is a fraction of the step, so shortening it shortens the note rather
      than the interval — the loop keeps its tempo either way. */
   env3.setADSR(0.005, soundLoop.interval * loopGate * 0.6, 0.2, soundLoop.interval * loopGate * 0.4);
