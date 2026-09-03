@@ -244,27 +244,50 @@ function press(entry) {
 }
 
 function onSoundLoop(timeFromNow) {
+  const scale = SCALES[scaleIndex].steps;
   const chord = parseInt(ui.chord.value, 10);
-  if (step > 4 + chord) {
-    step = chord;
-    if (step > 7) step -= 8;
+
+  /* Advance first, so the position and the direction agree on every step. */
+  switch (LOOP_DIRECTIONS[loopDir]) {
+    case 'down':
+      loopPos = (loopPos - 1 + loopSteps) % loopSteps;
+      break;
+    case 'up-down':
+      if (loopBack) {
+        loopPos -= 1;
+        if (loopPos <= 0) { loopPos = 0; loopBack = false; }
+      } else {
+        loopPos += 1;
+        if (loopPos >= loopSteps - 1) { loopPos = loopSteps - 1; loopBack = true; }
+      }
+      break;
+    case 'random':
+      loopPos = Math.floor(Math.random() * loopSteps);
+      break;
+    default:
+      loopPos = (loopPos + 1) % loopSteps;
   }
-  let degree = step;
-  let mul = 1;
-  if (degree > 7) {
-    degree -= 8;
-    mul = 2;
-  }
+
+  /* The figure spans `loopSpan` octaves of the scale. Chord offsets where in
+     the scale it starts, so it can sit under or against what is being played. */
+  const reach = scale.length * loopSpan;
+  const idx = (loopPos + chord) % reach;
+  const degree = idx % scale.length;
+  const mul = Math.pow(2, Math.floor(idx / scale.length));
+
   osc2.amp(env3);
-  /* Detuning the arpeggio voice against the played note is what puts the beat
-     into a sustained chord. */
+  env3.setRange(loopLevel * 0.25, 0);
+  /* Gate is a fraction of the step, so shortening it shortens the note rather
+     than the interval — the loop keeps its tempo either way. */
+  env3.setADSR(0.005, soundLoop.interval * loopGate * 0.6, 0.2, soundLoop.interval * loopGate * 0.4);
+  /* Detuning the loop voice against the played note is what puts the beat into
+     a sustained chord. */
   osc2.freq(
-    SCALES[scaleIndex].steps[degree] * ROOT * octave * mul * Math.pow(2, detuneCents / 1200),
+    scale[degree] * ROOT * octave * mul * Math.pow(2, detuneCents / 1200),
     0,
     timeFromNow
   );
   env3.play(osc2, timeFromNow);
-  step += 2;
 }
 
 // ---- Interface -------------------------------------------------------------
@@ -334,6 +357,17 @@ function buildInterface() {
   slider($('volume'), $('volume-out'), (v) => v.toFixed(2), (v) => masterVolume(v, 0.02));
   slider($('loop-delay'), $('loop-delay-out'), (v) => (v === 0 ? 'dry' : v.toFixed(2)), (v) => delayLoop.drywet(v));
   slider($('loop-div'), $('loop-div-out'), () => '', (v) => { loopDiv = v; applyTempoSync(); });
+  slider($('loop-steps'), $('loop-steps-out'), (v) => String(v), (v) => {
+    loopSteps = v;
+    if (loopPos >= loopSteps) loopPos = 0;
+  });
+  slider($('loop-span'), $('loop-span-out'), (v) => `${v} oct`, (v) => { loopSpan = v; });
+  slider($('loop-gate'), $('loop-gate-out'), (v) => v.toFixed(2), (v) => { loopGate = v; });
+  slider($('loop-level'), $('loop-level-out'), (v) => v.toFixed(2), (v) => { loopLevel = v; });
+  segmented($('loop-dir'), ['UP', 'DN', 'U-D', 'RND'], 0, (idx) => {
+    loopDir = idx;
+    loopBack = false;
+  });
   slider($('tempo'), $('tempo-out'), (v) => `${v} bpm`, (v) => { bpm = v; applyTempoSync(); });
   slider($('sat-low'), $('sat-low-out'), (v) => (v === 0 ? 'off' : v.toFixed(2)), (v) => saturator.setLow(v));
   slider($('sat-high'), $('sat-high-out'), (v) => (v === 0 ? 'off' : v.toFixed(2)), (v) => saturator.setHigh(v));
@@ -447,6 +481,22 @@ const DIVISIONS = [
   { label: '1/8T', beats: 1 / 3 },
   { label: '1/16', beats: 0.25 },
 ];
+/* ---- Looper ----
+   The old loop walked a fixed two-step-at-a-time figure with no control over
+   its length, direction or reach, so every setting of Chord produced the same
+   shape. It now has a length, a direction, an octave range and its own gate and
+   level, and it walks degrees of the SELECTED SCALE rather than a fixed table —
+   change scale and the same figure is reinterpreted. */
+const LOOP_DIRECTIONS = ['up', 'down', 'up-down', 'random'];
+let loopSteps = 8;
+let loopDir = 0;
+let loopSpan = 1;
+let loopGate = 0.5;
+let loopLevel = 0.5;
+/* Position within the figure, and which way a ping-pong is currently going. */
+let loopPos = 0;
+let loopBack = false;
+
 let bpm = 90;
 let delayDiv = 5;
 let loopDiv = 3;

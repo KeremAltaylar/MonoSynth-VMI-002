@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;500&display=swap" />
-  <link rel="stylesheet" type="text/css" href="style.css" />
+  <link rel="stylesheet" type="text/css" href="style.css?v=4" />
   <script src="libraries/p5.js"></script>
   <script src="libraries/p5.sound.js"></script>
 </head>
@@ -156,6 +156,26 @@
           <label for="loop-div">Loop time</label><span class="value" id="loop-div-out"></span>
           <input type="range" id="loop-div" min="0" max="7" step="1" value="3" />
         </div>
+        <div class="field">
+          <label for="loop-steps">Steps</label><span class="value" id="loop-steps-out"></span>
+          <input type="range" id="loop-steps" min="2" max="16" step="1" value="8" />
+        </div>
+        <div class="field">
+          <label>Direction</label>
+          <div class="segmented" id="loop-dir" role="group" aria-label="Loop direction"></div>
+        </div>
+        <div class="field">
+          <label for="loop-span">Range</label><span class="value" id="loop-span-out"></span>
+          <input type="range" id="loop-span" min="1" max="3" step="1" value="1" />
+        </div>
+        <div class="field">
+          <label for="loop-gate">Gate</label><span class="value" id="loop-gate-out"></span>
+          <input type="range" id="loop-gate" min="0.05" max="1" step="0.05" value="0.5" />
+        </div>
+        <div class="field">
+          <label for="loop-level">Level</label><span class="value" id="loop-level-out"></span>
+          <input type="range" id="loop-level" min="0" max="1" step="0.01" value="0.5" />
+        </div>
       </section>
 
       <section class="panel">
@@ -187,9 +207,9 @@
     </div>
   </div>
 
-  <script src="knob.js"></script>
-  <script src="saturator.js"></script>
-  <script src="sketch.js"></script>
+  <script src="knob.js?v=4"></script>
+  <script src="saturator.js?v=4"></script>
+  <script src="sketch.js?v=4"></script>
 </body>
 
 </html>
