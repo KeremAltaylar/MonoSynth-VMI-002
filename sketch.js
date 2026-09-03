@@ -45,6 +45,9 @@ let waveIndex = 0;
 let scaleIndex = 0;
 let noiseIndex = 0;
 let octave = 5;
+/* A gate I control outright, because p5's envelope will not ramp to true zero. */
+let noiseGate;
+
 let noiseLevel = 0.00001;
 let waveScale = 1;
 let step = 0;
@@ -109,7 +112,14 @@ function setup() {
   noise.disconnect();
 
   delay.process(osc, 0.25, 0.4, 8000);
-  delay.process(noise, 0.25, 0.4, 8000);
+  /* The noise passes through its own gate before the chain. With the Level knob
+     at 0 this is hard zero, so the noise is genuinely absent rather than merely
+     quiet — p5.Envelope bottoms out around -25dB, which is still audible hiss
+     under a quiet sine. */
+  noiseGate = getAudioContext().createGain();
+  noiseGate.gain.value = 0;
+  noise.connect(noiseGate);
+  delay.process(noiseGate, 0.25, 0.4, 8000);
   delayLoop.process(osc2, 0.25, 0.4, 8000);
   delay.drywet(0);
   delayLoop.drywet(0);
@@ -242,6 +252,10 @@ function applyVoice() {
 function applyLevels() {
   env1.setRange(Math.max(waveScale * 0.1, 1e-6), 0);
   env2.setRange(Math.max(noiseLevel, 1e-6), 0);
+  if (noiseGate) {
+    const t = getAudioContext().currentTime;
+    noiseGate.gain.setTargetAtTime(noiseLevel > 0 ? 1 : 0, t, 0.02);
+  }
 }
 
 function ensureAudio() {
@@ -250,6 +264,19 @@ function ensureAudio() {
   osc.start();
   osc2.start();
   noise.start();
+  /* Zero the intrinsic gain BEFORE attaching the envelope. p5 leaves a noise
+     source's own output gain at 0.5 and amp(envelope) only CONNECTS the
+     envelope to that param — and a Web Audio param is intrinsic + connected
+     signals, so the envelope could never bring it below 0.5. The noise was
+     therefore running at half amplitude no matter what the Level knob said.
+     With the intrinsic at 0, the envelope alone decides. */
+  /* Set the param directly: p5's amp(0) uses linearRampToValueAtTime with no
+     anchoring setValueAtTime, so it does not reliably take. */
+  const nowT = getAudioContext().currentTime;
+  [osc, osc2, noise].forEach((src) => {
+    src.output.gain.cancelScheduledValues(nowT);
+    src.output.gain.setValueAtTime(0, nowT);
+  });
   noise.amp(env2);
   audioLive = true;
   ui.power.textContent = 'Audio on';
