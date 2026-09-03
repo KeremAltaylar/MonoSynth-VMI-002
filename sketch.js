@@ -146,24 +146,11 @@ function setup() {
 }
 
 function draw() {
-  const wave = WAVES[waveIndex];
-  osc.setType(wave);
-  osc2.setType(wave);
-  waveScale = wave === 'sine' || wave === 'triangle' ? 2 : 1;
-  noise.setType(NOISES[noiseIndex]);
-
-  const amp = waveScale;
-  env1.setRange(Math.max(amp * 0.1, 1e-6), 0);
-  /* env3 belongs to the loop and carries the loop Level; setting it here every
-     frame overwrote that control. env1 and env2 are the keyboard voice and its
-     noise, so those stay. */
-  /* Clamped above zero on purpose. p5.Envelope.setRange does
-     `this.aLevel = aLevel || 1`, so a level of exactly 0 does not mean silence —
-     it means FULL SCALE. The noise slider defaulted to 0.00001, which is not a
-     multiple of its own step, so the browser rounded it to 0, and every key
-     press then fired white noise at full amplitude alongside the note. */
-  env2.setRange(Math.max(noiseLevel, 1e-6), 0);
-
+  /* draw() only draws. Audio settings are applied when they change — see
+     applyVoice(). p5.Noise.setType stops the noise source and starts a NEW
+     BufferSource on every call, so running it sixty times a second was sixty
+     discontinuities and sixty fresh audio nodes per second: a continuous
+     crackle layered over whatever was playing. */
   background('#0f1412');
 
   /* Spectrum: columns rising off the floor, warm at the bottom of the range and
@@ -236,6 +223,26 @@ function keyReleased() {
 }
 
 // ---- Sound -----------------------------------------------------------------
+
+/* Everything that touches the audio graph when a control moves. Called once at
+   startup and from the controls that change it, never per frame. */
+function applyVoice() {
+  const wave = WAVES[waveIndex];
+  osc.setType(wave);
+  osc2.setType(wave);
+  /* Sine and triangle are quieter than square and saw for the same peak, so
+     they get more level to sit at a comparable loudness. */
+  waveScale = wave === 'sine' || wave === 'triangle' ? 2 : 1;
+  noise.setType(NOISES[noiseIndex]);
+  applyLevels();
+}
+
+/* p5.Envelope.setRange is `aLevel || 1`, so a level of exactly zero means FULL
+   SCALE rather than silence. Every level is clamped above zero. */
+function applyLevels() {
+  env1.setRange(Math.max(waveScale * 0.1, 1e-6), 0);
+  env2.setRange(Math.max(noiseLevel, 1e-6), 0);
+}
 
 function ensureAudio() {
   if (audioLive) return;
@@ -345,9 +352,9 @@ function buildInterface() {
     ui.dock.setAttribute('aria-hidden', String(!open));
   });
 
-  segmented($('wave-seg'), WAVES, waveIndex, (i) => (waveIndex = i));
+  segmented($('wave-seg'), WAVES, waveIndex, (i) => { waveIndex = i; applyVoice(); });
   segmented($('scale-seg'), SCALES.map((sc) => sc.label), scaleIndex, (i) => (scaleIndex = i));
-  segmented($('noise-seg'), NOISES, noiseIndex, (i) => (noiseIndex = i));
+  segmented($('noise-seg'), NOISES, noiseIndex, (i) => { noiseIndex = i; applyVoice(); });
   segmented($('filter-seg'), FILTERS.map((f) => f.label), 0, (i) => filter.setType(FILTERS[i].id));
 
   slider($('attack'), $('attack-out'), (v) => `${v.toFixed(3)}s`, setEnvelope);
@@ -388,7 +395,7 @@ function buildInterface() {
   slider($('sat-high'), $('sat-high-out'), (v) => (v === 0 ? 'off' : v.toFixed(2)), (v) => saturator.setHigh(v));
   /* The usable noise range is tiny in absolute terms, so show it as a percentage
      of the slider's span rather than a row of leading zeros. */
-  slider($('noise-level'), $('noise-level-out'), (v) => `${Math.round((v / 0.03) * 100)}%`, (v) => (noiseLevel = v));
+  slider($('noise-level'), $('noise-level-out'), (v) => `${Math.round((v / 0.03) * 100)}%`, (v) => { noiseLevel = v; applyLevels(); });
   slider($('chord'), $('chord-out'), (v) => String(v), () => {});
 
   $('oct-down').addEventListener('click', () => setOctave(octave / 2));
@@ -406,6 +413,8 @@ function buildInterface() {
 
   buildKeys();
 
+  /* Once at startup: the segmented pickers do not fire their callback on build. */
+  applyVoice();
   applyTempoSync();
   ui.clip = document.getElementById("clip");
 }
