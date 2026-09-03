@@ -86,7 +86,13 @@ function setup() {
      land whenever the main thread got to it, which is audible as an uneven
      arpeggio. Both the pitch change and the envelope take the same offset. */
   osc2.freq(0);
-  osc2.amp(env1);
+  /* env3, not env1. The loop oscillator was being driven by the KEYBOARD
+     envelope, so every key press sounded osc2 as well — at whatever frequency
+     it happened to hold, which at startup is 0Hz. A square at 0Hz is a DC step,
+     and an envelope-shaped DC pulse on every note is a heavy thump that shoves
+     the rest of the chain into distortion. That was the parallel voice heard
+     underneath the sine. The loop voice now answers only to the loop. */
+  osc2.amp(env3);
   /* Every source and every effect stage is disconnected from the master before
      it is patched onward, so the signal reaches the output by exactly one path.
      p5.Oscillator connects itself to the master when constructed and p5.Effect
@@ -148,7 +154,9 @@ function draw() {
 
   const amp = waveScale;
   env1.setRange(amp * 0.1, 0);
-  env3.setRange(amp * 0.2, 0);
+  /* env3 belongs to the loop and carries the loop Level; setting it here every
+     frame overwrote that control. env1 and env2 are the keyboard voice and its
+     noise, so those stay. */
   env2.setRange(noiseLevel, 0);
 
   background('#0f1412');
