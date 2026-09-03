@@ -5,11 +5,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#141b18" />
-  <title>VMI-002 — Monophonic Synth</title>
+  <title>VMI-002 — Polyphonic Synth</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;500&display=swap" />
-  <link rel="stylesheet" type="text/css" href="style.css?v=9" />
+  <link rel="stylesheet" type="text/css" href="style.css?v=10" />
   <script src="libraries/p5.js"></script>
   <script src="libraries/p5.sound.js"></script>
 </head>
@@ -19,7 +19,7 @@
     <header class="bar">
       <div class="brand">
         <span class="mark">VMI-002</span>
-        <h1>Mono<span class="long">phonic </span>Synth</h1>
+        <h1>Poly<span class="long">phonic </span>Synth</h1>
       </div>
       <div class="bar-actions">
         <span class="clip" id="clip" aria-live="polite" hidden>Clip</span>
@@ -48,6 +48,10 @@
             <button type="button" id="oct-down" aria-label="Octave down">&minus;</button>
             <button type="button" id="oct-up" aria-label="Octave up">+</button>
           </div>
+        </div>
+        <div class="field">
+          <label for="voices">Voices</label><span class="value" id="voices-out"></span>
+          <input type="range" id="voices" min="1" max="8" step="1" value="6" />
         </div>
         <div class="field">
           <label for="detune">Detune</label><span class="value" id="detune-out"></span>
@@ -207,9 +211,9 @@
     </div>
   </div>
 
-  <script src="knob.js?v=9"></script>
-  <script src="saturator.js?v=9"></script>
-  <script src="sketch.js?v=9"></script>
+  <script src="knob.js?v=10"></script>
+  <script src="saturator.js?v=10"></script>
+  <script src="sketch.js?v=10"></script>
 </body>
 
 </html>

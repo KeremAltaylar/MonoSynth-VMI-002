@@ -1,4 +1,4 @@
-/* VMI-002 — monophonic synthesiser.
+/* VMI-002 — polyphonic synthesiser.
    The audio graph is unchanged from the original sketch; the canvas is now only
    an oscilloscope and every control lives in the DOM so it can lay out
    responsively and be played by touch. */
@@ -36,8 +36,20 @@ const ROWS = [
 
 // ---- State -----------------------------------------------------------------
 
-let osc, osc2, noise, delay, delayLoop, reverb, distortion, filter, fft;
-let env1, env2, env3;
+let osc2, noise, delay, delayLoop, reverb, distortion, filter, fft;
+let env2, env3;
+
+/* The keyboard is polyphonic. A pool of identical oscillator+envelope voices is
+   built once and allocated per note; MAX_VOICES is what exists, `polyphony` is
+   how many of them the Voices control currently allows. At 1 the instrument is
+   the monophonic VMI-002 it started as, which is still a voicing worth having. */
+const MAX_VOICES = 8;
+const voices = [];
+let polyphony = 6;
+/** All voices sum here, so the chain downstream is patched once, not per voice. */
+let voiceBus;
+/** key entry -> the voice sounding it. Its size is the held-note count. */
+const sounding = new Map();
 let soundLoop;
 
 let audioLive = false;
@@ -71,18 +83,27 @@ function setup() {
   reverb = new p5.Reverb();
   delay = new p5.Delay();
   delayLoop = new p5.Delay();
-  osc = new p5.Oscillator('square');
   osc2 = new p5.Oscillator('square');
   noise = new p5.Noise('white');
 
-  env1 = new p5.Envelope(0.001, 0.3, 0.3, 0.02);
   env2 = new p5.Envelope(0.001, 0.3, 0.3, 0.02);
   env3 = new p5.Envelope(0.001, 0.3, 0.3, 0.02);
 
   distortion = new p5.Distortion(1, '2x');
 
-  osc.freq(0);
-  osc.amp(env1);
+  /* One bus for the whole keyboard. Each voice's envelope is its own, so notes
+     released while others are held decay independently. */
+  voiceBus = getAudioContext().createGain();
+  voiceBus.gain.value = 1;
+  for (let i = 0; i < MAX_VOICES; i++) {
+    const vOsc = new p5.Oscillator('square');
+    const vEnv = new p5.Envelope(0.001, 0.3, 0.3, 0.02);
+    vOsc.freq(0);
+    vOsc.amp(vEnv);
+    vOsc.disconnect();
+    vOsc.connect(voiceBus);
+    voices.push({ osc: vOsc, env: vEnv, entry: null, startedAt: 0, releasedAt: -1e9 });
+  }
   /* p5.SoundLoop hands the callback the offset, in seconds from now, at which
      this step should sound — it fires early on purpose so the note can be
      scheduled ahead on the audio clock. Dropping it made every arpeggio note
@@ -107,11 +128,10 @@ function setup() {
      The delays also start dry: p5.Effect constructs as CrossFade(1), fully wet,
      and their internal lowpass sat at 2300Hz, so everything played was a
      comb-filtered, dulled copy of itself. */
-  osc.disconnect();
   osc2.disconnect();
   noise.disconnect();
 
-  delay.process(osc, 0.25, 0.4, 8000);
+  delay.process(voiceBus, 0.25, 0.4, 8000);
   /* The noise passes through its own gate before the chain. With the Level knob
      at 0 this is hard zero, so the noise is genuinely absent rather than merely
      quiet — p5.Envelope bottoms out around -25dB, which is still audible hiss
@@ -229,7 +249,7 @@ function keyPressed() {
 
 function keyReleased() {
   const entry = keyMap.get(key.toLowerCase());
-  if (entry) entry.el.classList.remove('active');
+  if (entry) release(entry);
 }
 
 // ---- Sound -----------------------------------------------------------------
@@ -238,7 +258,7 @@ function keyReleased() {
    startup and from the controls that change it, never per frame. */
 function applyVoice() {
   const wave = WAVES[waveIndex];
-  osc.setType(wave);
+  voices.forEach((v) => v.osc.setType(wave));
   osc2.setType(wave);
   /* Sine and triangle are quieter than square and saw for the same peak, so
      they get more level to sit at a comparable loudness. */
@@ -250,7 +270,7 @@ function applyVoice() {
 /* p5.Envelope.setRange is `aLevel || 1`, so a level of exactly zero means FULL
    SCALE rather than silence. Every level is clamped above zero. */
 function applyLevels() {
-  env1.setRange(Math.max(waveScale * 0.1, 1e-6), 0);
+  voices.forEach((v) => v.env.setRange(Math.max(waveScale * 0.1, 1e-6), 0));
   env2.setRange(Math.max(noiseLevel, 1e-6), 0);
   if (noiseGate) {
     const t = getAudioContext().currentTime;
@@ -261,7 +281,7 @@ function applyLevels() {
 function ensureAudio() {
   if (audioLive) return;
   userStartAudio();
-  osc.start();
+  voices.forEach((v) => v.osc.start());
   osc2.start();
   noise.start();
   /* Zero the intrinsic gain BEFORE attaching the envelope. p5 leaves a noise
@@ -273,7 +293,7 @@ function ensureAudio() {
   /* Set the param directly: p5's amp(0) uses linearRampToValueAtTime with no
      anchoring setValueAtTime, so it does not reliably take. */
   const nowT = getAudioContext().currentTime;
-  [osc, osc2, noise].forEach((src) => {
+  [...voices.map((v) => v.osc), osc2, noise].forEach((src) => {
     src.output.gain.cancelScheduledValues(nowT);
     src.output.gain.setValueAtTime(0, nowT);
   });
@@ -283,13 +303,75 @@ function ensureAudio() {
   ui.power.classList.add('live');
 }
 
+/* Pick the voice this note should use. A voice that has already been released
+   is preferred, oldest first; only when every allowed voice is still held does
+   a note steal one, and then it takes the one that has been held longest. */
+function allocate() {
+  const pool = voices.slice(0, polyphony);
+  let free = null;
+  for (const v of pool) if (!v.entry && (!free || v.releasedAt < free.releasedAt)) free = v;
+  if (free) return { voice: free, stolen: false };
+  let oldest = pool[0];
+  for (const v of pool) if (v.startedAt < oldest.startedAt) oldest = v;
+  return { voice: oldest, stolen: true };
+}
+
+/* Attack only. The note is held at the envelope's sustain level until the key
+   comes up — env.play() ran the whole ADSR including the release, so a held key
+   sounded exactly like a tapped one and the Sustain control did nothing. */
 function press(entry) {
   ensureAudio();
+  if (sounding.has(entry)) return;   // key repeat, or a touch already down
   const steps = SCALES[scaleIndex].steps;
-  osc.freq(ROOT * octave * entry.mul * steps[entry.degree]);
-  env1.play();
-  env2.play();
+  const freq = ROOT * octave * entry.mul * steps[entry.degree];
+  const { voice, stolen } = allocate();
+
+  if (stolen) {
+    /* The stolen voice is mid-note, so jumping its frequency would be a step
+       discontinuity. A ramp far shorter than a glide removes it without being
+       heard as a slide. */
+    releaseVoice(voice);
+    voice.osc.freq(freq, 0.005);
+  } else {
+    voice.osc.freq(freq);
+  }
+
+  voice.entry = entry;
+  voice.startedAt = getAudioContext().currentTime;
+  voice.env.triggerAttack();
+  sounding.set(entry, voice);
+
+  /* The noise layer is one source shared by the whole keyboard, so it opens on
+     the first key down and closes on the last key up rather than retriggering
+     under every note. */
+  if (sounding.size === 1) env2.triggerAttack();
   entry.el.classList.add('active');
+}
+
+function release(entry) {
+  entry.el.classList.remove('active');
+  const voice = sounding.get(entry);
+  if (!voice) return;
+  releaseVoice(voice);
+  if (sounding.size === 0) env2.triggerRelease();
+}
+
+/* Ends whatever this voice is playing, whether the key came up or the note was
+   stolen. A stolen key stops being lit even though it is still held down, so
+   the keyboard shows what is sounding rather than what is pressed. */
+function releaseVoice(voice) {
+  if (voice.entry) {
+    voice.entry.el.classList.remove('active');
+    sounding.delete(voice.entry);
+  }
+  voice.entry = null;
+  voice.releasedAt = getAudioContext().currentTime;
+  voice.env.triggerRelease();
+}
+
+/** Releasing everything, for a voice-count change or the window losing focus. */
+function releaseAll() {
+  for (const entry of [...sounding.keys()]) release(entry);
 }
 
 function onSoundLoop(timeFromNow) {
@@ -370,6 +452,9 @@ function buildInterface() {
   });
 
   ui.power.addEventListener('click', ensureAudio);
+  /* Keyup never arrives if the window loses focus mid-note, which would leave
+     the note sustaining with no way to stop it. */
+  window.addEventListener('blur', releaseAll);
 
   ui.keysToggle.addEventListener('click', () => {
     const open = ui.dock.classList.toggle('open');
@@ -391,6 +476,13 @@ function buildInterface() {
 
   slider($('cutoff'), $('cutoff-out'), hz, (v) => filter.freq(v, 0.02));
   slider($('res'), $('res-out'), (v) => v.toFixed(1), (v) => filter.res(v));
+  slider($('voices'), $('voices-out'), (v) => (v === 1 ? 'mono' : `${v}`), (v) => {
+    polyphony = v;
+    /* Voices outside the new count could otherwise sustain with nothing able to
+       release them. */
+    voices.slice(polyphony).forEach((voice) => { if (voice.entry) releaseVoice(voice); });
+    if (sounding.size === 0) env2.triggerRelease();
+  });
   slider($('detune'), $('detune-out'), (v) => `${v > 0 ? '+' : ''}${v}¢`, (v) => (detuneCents = v));
 
   slider($('reverb'), $('reverb-out'), (v) => v.toFixed(2), (v) => reverb.drywet(v));
@@ -449,7 +541,7 @@ function buildInterface() {
 function setEnvelope() {
   const read = (id) => parseFloat(document.getElementById(id).value);
   const adsr = [read('attack'), read('decay'), read('sustain'), read('release')];
-  env1.setADSR(...adsr);
+  voices.forEach((v) => v.env.setADSR(...adsr));
   env2.setADSR(...adsr);
 }
 
@@ -507,7 +599,7 @@ function buildKeys() {
         e.preventDefault();
         press(entry);
       };
-      const up = () => el.classList.remove('active');
+      const up = () => release(entry);
 
       el.addEventListener('mousedown', down);
       el.addEventListener('mouseup', up);
